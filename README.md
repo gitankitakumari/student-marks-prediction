@@ -112,6 +112,4 @@ cd Student-Marks-Prediction
 ```
 
 ---
-## Contact
-📌 *Author: Suraj Kumar*
-🔗 [LinkedIn](https://www.linkedin.com/in/suraj-kumar-2307skp/) | [GitHub](https://github.com/surajpathak23) | [WhatsApp](https://wa.me/919142496994)
+
