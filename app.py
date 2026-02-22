@@ -1,0 +1,1004 @@
+import os
+import io
+import json
+from datetime import datetime
+
+import numpy as np
+import pandas as pd
+import streamlit as st
+
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import r2_score, mean_absolute_error
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+import joblib
+
+import plotly.express as px
+import plotly.graph_objects as go
+
+# PDF export
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+
+# Custom CSS for dark theme styling
+st.set_page_config(
+    page_title="Student Marks Prediction",
+    page_icon="🧠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+st.markdown("""
+<style>
+    * {
+        margin: 0;
+        padding: 0;
+    }
+    
+    body {
+        background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+        color: #e0e0e0;
+    }
+    
+    .main {
+        background: linear-gradient(135deg, #0f0f1e 0%, #1a1a2e 100%);
+    }
+    
+    .stContainer {
+        background: transparent;
+    }
+    
+    /* Header styling */
+    h1 {
+        background: linear-gradient(135deg, #ff006e, #8338ec);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        font-weight: 800;
+        font-size: 2.5rem !important;
+        margin-bottom: 0.5rem;
+    }
+    
+    h2 {
+        color: #ffffff;
+        font-weight: 700;
+        margin-top: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    h3 {
+        color: #e0e0e0;
+        font-weight: 600;
+    }
+    
+    /* Card styling */
+    .stContainer {
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.02);
+        backdrop-filter: blur(10px);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    /* Input styling */
+    .stTextInput > div > div > input,
+    .stNumberInput > div > div > input,
+    .stSelectbox > div > div > select {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border: 1px solid rgba(255, 0, 110, 0.3) !important;
+        color: #e0e0e0 !important;
+        border-radius: 8px !important;
+        padding: 0.75rem !important;
+    }
+    
+    .stTextInput > div > div > input:focus,
+    .stNumberInput > div > div > input:focus,
+    .stSelectbox > div > div > select:focus {
+        border-color: #ff006e !important;
+        box-shadow: 0 0 10px rgba(255, 0, 110, 0.3) !important;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(135deg, #ff006e, #8338ec) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 8px !important;
+        padding: 0.75rem 1.5rem !important;
+        font-weight: 600 !important;
+        transition: all 0.3s ease !important;
+        box-shadow: 0 4px 15px rgba(255, 0, 110, 0.3) !important;
+        width: 100% !important;
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 6px 20px rgba(255, 0, 110, 0.5) !important;
+    }
+    
+    /* Metric styling */
+    .stMetric {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 0, 110, 0.2);
+        border-radius: 8px;
+        padding: 1rem;
+    }
+    
+    .stMetric > div > div > div > p {
+        color: #b0b0b0;
+    }
+    
+    /* Success/Error messages */
+    .stSuccess {
+        background: rgba(76, 175, 80, 0.1) !important;
+        border: 1px solid rgba(76, 175, 80, 0.3) !important;
+        border-radius: 8px !important;
+        color: #4caf50 !important;
+    }
+    
+    .stError {
+        background: rgba(244, 67, 54, 0.1) !important;
+        border: 1px solid rgba(244, 67, 54, 0.3) !important;
+        border-radius: 8px !important;
+        color: #f44336 !important;
+    }
+    
+    .stInfo {
+        background: rgba(33, 150, 243, 0.1) !important;
+        border: 1px solid rgba(33, 150, 243, 0.3) !important;
+        border-radius: 8px !important;
+        color: #2196f3 !important;
+    }
+    
+    /* Sidebar styling */
+    .stSidebar {
+        background: rgba(255, 255, 255, 0.02);
+        border-right: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .stSidebar > div > div > div {
+        background: transparent;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 0, 110, 0.2);
+    }
+    
+    .streamlit-expanderHeader:hover {
+        background: rgba(255, 255, 255, 0.08);
+    }
+    
+    /* Divider */
+    hr {
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    /* Caption and text */
+    .stCaption {
+        color: #909090;
+    }
+    
+    /* Prediction card */
+    .prediction-card {
+        background: linear-gradient(135deg, rgba(255, 0, 110, 0.1), rgba(131, 56, 236, 0.1));
+        border: 2px solid rgba(255, 0, 110, 0.3);
+        border-radius: 12px;
+        padding: 2rem;
+        text-align: center;
+        margin: 1.5rem 0;
+    }
+    
+    .prediction-score {
+        font-size: 3rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff006e, #8338ec);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .performance-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 600;
+        margin-top: 1rem;
+    }
+    
+    .badge-excellent {
+        background: rgba(76, 175, 80, 0.2);
+        color: #4caf50;
+        border: 1px solid rgba(76, 175, 80, 0.5);
+    }
+    
+    .badge-good {
+        background: rgba(33, 150, 243, 0.2);
+        color: #2196f3;
+        border: 1px solid rgba(33, 150, 243, 0.5);
+    }
+    
+    .badge-average {
+        background: rgba(255, 193, 7, 0.2);
+        color: #ffc107;
+        border: 1px solid rgba(255, 193, 7, 0.5);
+    }
+    
+    .badge-poor {
+        background: rgba(244, 67, 54, 0.2);
+        color: #f44336;
+        border: 1px solid rgba(244, 67, 54, 0.5);
+    }
+    
+    /* Input section styling */
+    .input-section {
+        background: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 0, 110, 0.2);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .input-label {
+        color: #e0e0e0;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+    }
+    
+    /* Improvement card */
+    .improvement-card {
+        background: linear-gradient(135deg, rgba(76, 175, 80, 0.1), rgba(33, 150, 243, 0.1));
+        border: 2px solid rgba(76, 175, 80, 0.3);
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 1rem 0;
+    }
+    
+    .improvement-title {
+        color: #4caf50;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+    
+    .improvement-action {
+        background: rgba(255, 255, 255, 0.05);
+        border-left: 3px solid #ff006e;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+MODEL_DIR = "models"
+MODEL_PATH = os.path.join(MODEL_DIR, "student_mark_model.pkl")
+MODEL_META_PATH = os.path.join(MODEL_DIR, "model_meta.json")
+DEFAULT_DATA_PATH = "student_scores.csv"
+
+REQUIRED_COLUMNS = [
+    "Study_Hours",
+    "Attendance",
+    "Sleep_Hours",
+    "Internet_Usage",
+    "Previous_Marks",
+    "Marks",
+]
+
+FEATURE_COLUMNS = [
+    "Study_Hours",
+    "Attendance",
+    "Sleep_Hours",
+    "Internet_Usage",
+    "Previous_Marks",
+]
+TARGET_COLUMN = "Marks"
+
+
+def ensure_model_dir():
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+
+def load_default_dataset() -> pd.DataFrame:
+    if os.path.exists(DEFAULT_DATA_PATH):
+        df = pd.read_csv(DEFAULT_DATA_PATH)
+        return df
+    return pd.DataFrame(columns=(["Student_Name"] + REQUIRED_COLUMNS))
+
+
+def validate_dataset(df: pd.DataFrame) -> tuple[bool, list[str]]:
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    return (len(missing) == 0, missing)
+
+
+def coerce_numeric(df: pd.DataFrame, cols: list[str]) -> pd.DataFrame:
+    out = df.copy()
+    for c in cols:
+        out[c] = pd.to_numeric(out[c], errors="coerce")
+    return out
+
+
+def prepare_data(df: pd.DataFrame):
+    X = df.copy()
+    if "Student_Name" in X.columns:
+        X = X.drop(columns=["Student_Name"])
+    X = coerce_numeric(X, FEATURE_COLUMNS + [TARGET_COLUMN]).dropna()
+    X_features = X[FEATURE_COLUMNS]
+    y = X[TARGET_COLUMN]
+    return X_features, y
+
+
+def build_model(model_type: str, rf_n_estimators: int = 200, rf_max_depth: int | None = None):
+    if model_type == "Linear Regression":
+        return LinearRegression()
+    else:
+        return RandomForestRegressor(
+            n_estimators=rf_n_estimators,
+            max_depth=rf_max_depth,
+            random_state=42,
+            n_jobs=-1,
+        )
+
+
+def train_and_evaluate(
+    df: pd.DataFrame,
+    model_type: str,
+    rf_n_estimators: int,
+    rf_max_depth: int | None,
+):
+    X, y = prepare_data(df)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+    model = build_model(model_type, rf_n_estimators, rf_max_depth)
+    model.fit(X_train, y_train)
+    preds = model.predict(X_test)
+    r2 = r2_score(y_test, preds)
+    mae = mean_absolute_error(y_test, preds)
+    return model, {"r2": float(r2), "mae": float(mae), "model_type": model_type}
+
+
+def save_model(model, meta: dict):
+    ensure_model_dir()
+    joblib.dump(model, MODEL_PATH)
+    with open(MODEL_META_PATH, "w") as f:
+        json.dump(meta, f, indent=2)
+
+
+def load_model():
+    if os.path.exists(MODEL_PATH):
+        model = joblib.load(MODEL_PATH)
+        meta = {}
+        if os.path.exists(MODEL_META_PATH):
+            with open(MODEL_META_PATH, "r") as f:
+                meta = json.load(f)
+        return model, meta
+    return None, {}
+
+
+def performance_message(score: float) -> str:
+    if score >= 90:
+        return "Outstanding performance expected! Keep up the excellent work!"
+    if score >= 80:
+        return "Excellent! You're on track for strong results."
+    if score >= 70:
+        return "Great job! Good effort and consistency."
+    if score >= 60:
+        return "Good effort. A bit more focus could boost your score."
+    if score >= 50:
+        return "Below average. Increase study hours and improve consistency."
+    return "At risk. Focus on fundamentals and seek help where needed."
+
+
+def get_performance_badge(score: float) -> tuple[str, str]:
+    if score >= 90:
+        return "badge-excellent", "🌟 Excellent"
+    if score >= 80:
+        return "badge-good", "✨ Very Good"
+    if score >= 70:
+        return "badge-good", "👍 Good"
+    if score >= 60:
+        return "badge-average", "⚠️ Average"
+    if score >= 50:
+        return "badge-poor", "❌ Below Average"
+    return "badge-poor", "🚨 Critical"
+
+
+def calculate_study_efficiency(study_hours: float, attendance: float, sleep_hours: float, internet_usage: float) -> float:
+    """Calculate a study efficiency score based on input factors"""
+    efficiency = 0
+    
+    if study_hours >= 6:
+        efficiency += 30
+    elif study_hours >= 4:
+        efficiency += 25
+    elif study_hours >= 2:
+        efficiency += 15
+    else:
+        efficiency += 5
+    
+    efficiency += (attendance / 100) * 30
+    
+    if 7 <= sleep_hours <= 9:
+        efficiency += 15
+    elif 6 <= sleep_hours < 7 or 9 < sleep_hours <= 10:
+        efficiency += 10
+    else:
+        efficiency += 5
+    
+    if internet_usage > 6:
+        efficiency -= 15
+    elif internet_usage > 4:
+        efficiency -= 10
+    elif internet_usage > 2:
+        efficiency -= 5
+    
+    return max(0, min(100, efficiency))
+
+
+def get_improvement_recommendations(study_hours: float, attendance: float, sleep_hours: float, internet_usage: float, predicted_marks: float, previous_marks: float, model) -> list[dict]:
+    """Generate specific improvement actions to reach target marks"""
+    recommendations = []
+    improvement_gap = previous_marks - predicted_marks
+    target_marks = max(previous_marks + 4, 80)
+    
+    if improvement_gap > 0:
+        # Study hours improvement
+        if study_hours < 5:
+            new_study_hours = min(study_hours + 1.5, 6)
+            features = np.array([[new_study_hours, attendance, sleep_hours, internet_usage, previous_marks]])
+            new_pred = float(model.predict(features)[0])
+            new_pred = max(0.0, min(100.0, new_pred))
+            improvement = new_pred - predicted_marks
+            recommendations.append({
+                "action": "📚 Increase Study Hours",
+                "current": f"{study_hours:.1f} hrs/day",
+                "target": f"{new_study_hours:.1f} hrs/day",
+                "impact": f"+{improvement:.1f} marks",
+                "new_score": f"{new_pred:.1f}",
+                "description": f"Increasing study hours from {study_hours:.1f} to {new_study_hours:.1f} hours per day could boost your marks to {new_pred:.1f}"
+            })
+        
+        # Attendance improvement
+        if attendance < 95:
+            new_attendance = min(attendance + 5, 100)
+            features = np.array([[study_hours, new_attendance, sleep_hours, internet_usage, previous_marks]])
+            new_pred = float(model.predict(features)[0])
+            new_pred = max(0.0, min(100.0, new_pred))
+            improvement = new_pred - predicted_marks
+            recommendations.append({
+                "action": "📍 Improve Attendance",
+                "current": f"{attendance:.1f}%",
+                "target": f"{new_attendance:.1f}%",
+                "impact": f"+{improvement:.1f} marks",
+                "new_score": f"{new_pred:.1f}",
+                "description": f"Improving attendance from {attendance:.1f}% to {new_attendance:.1f}% could boost your marks to {new_pred:.1f}"
+            })
+        
+        # Internet usage reduction
+        if internet_usage > 2:
+            new_internet = max(internet_usage - 1.5, 0.5)
+            features = np.array([[study_hours, attendance, sleep_hours, new_internet, previous_marks]])
+            new_pred = float(model.predict(features)[0])
+            new_pred = max(0.0, min(100.0, new_pred))
+            improvement = new_pred - predicted_marks
+            recommendations.append({
+                "action": "📱 Reduce Internet Usage",
+                "current": f"{internet_usage:.1f} hrs/day",
+                "target": f"{new_internet:.1f} hrs/day",
+                "impact": f"+{improvement:.1f} marks",
+                "new_score": f"{new_pred:.1f}",
+                "description": f"Reducing internet usage from {internet_usage:.1f} to {new_internet:.1f} hours per day could boost your marks to {new_pred:.1f}"
+            })
+        
+        # Sleep optimization
+        if sleep_hours < 7 or sleep_hours > 9:
+            new_sleep = 8.0
+            features = np.array([[study_hours, attendance, new_sleep, internet_usage, previous_marks]])
+            new_pred = float(model.predict(features)[0])
+            new_pred = max(0.0, min(100.0, new_pred))
+            improvement = new_pred - predicted_marks
+            recommendations.append({
+                "action": "😴 Optimize Sleep",
+                "current": f"{sleep_hours:.1f} hrs/day",
+                "target": f"{new_sleep:.1f} hrs/day",
+                "impact": f"+{improvement:.1f} marks",
+                "new_score": f"{new_pred:.1f}",
+                "description": f"Optimizing sleep to {new_sleep:.1f} hours per day could boost your marks to {new_pred:.1f}"
+            })
+        
+        # Combined improvement
+        new_study = min(study_hours + 1.5, 6)
+        new_attendance = min(attendance + 5, 100)
+        new_internet = max(internet_usage - 1.5, 0.5)
+        new_sleep = 8.0
+        features = np.array([[new_study, new_attendance, new_sleep, new_internet, previous_marks]])
+        combined_pred = float(model.predict(features)[0])
+        combined_pred = max(0.0, min(100.0, combined_pred))
+        combined_improvement = combined_pred - predicted_marks
+        
+        recommendations.append({
+            "action": "🚀 Combined Strategy",
+            "current": f"Study: {study_hours:.1f}h, Attend: {attendance:.1f}%, Sleep: {sleep_hours:.1f}h, Internet: {internet_usage:.1f}h",
+            "target": f"Study: {new_study:.1f}h, Attend: {new_attendance:.1f}%, Sleep: {new_sleep:.1f}h, Internet: {new_internet:.1f}h",
+            "impact": f"+{combined_improvement:.1f} marks",
+            "new_score": f"{combined_pred:.1f}",
+            "description": f"Implementing all improvements together could boost your marks to {combined_pred:.1f} - reaching your target!"
+        })
+    
+    return recommendations
+
+
+def get_study_recommendations(study_hours: float, attendance: float, sleep_hours: float, internet_usage: float, predicted_marks: float, previous_marks: float) -> list[str]:
+    """Generate personalized study recommendations"""
+    recommendations = []
+    
+    improvement = predicted_marks - previous_marks
+    
+    if study_hours < 4:
+        recommendations.append("📚 Increase study hours to at least 4 hours per day for better results")
+    elif study_hours >= 6:
+        recommendations.append("✅ Excellent study hours! Maintain this consistency")
+    
+    if attendance < 75:
+        recommendations.append("📍 Improve attendance - aim for at least 75% to stay on track")
+    elif attendance >= 90:
+        recommendations.append("🎯 Outstanding attendance! Keep it up")
+    
+    if sleep_hours < 6:
+        recommendations.append("😴 Get more sleep - aim for 7-8 hours for better focus and retention")
+    elif sleep_hours > 10:
+        recommendations.append("⏰ Reduce sleep time - too much sleep can affect productivity")
+    else:
+        recommendations.append("😴 Your sleep schedule is optimal for learning")
+    
+    if internet_usage > 5:
+        recommendations.append("📱 Reduce internet usage - limit to 2-3 hours for better focus")
+    elif internet_usage <= 2:
+        recommendations.append("📱 Great internet discipline! This helps your focus")
+    
+    if improvement > 5:
+        recommendations.append(f"📈 Expected improvement of {improvement:.1f} points! Your efforts are paying off")
+    elif improvement < -5:
+        recommendations.append(f"⚠️ Predicted marks are {abs(improvement):.1f} points lower. Review your study strategy")
+    
+    if predicted_marks >= 80:
+        recommendations.append("🎯 Maintain your current study habits - you're doing great!")
+    
+    if not recommendations:
+        recommendations.append("✅ Your study habits look good! Keep maintaining this routine.")
+    
+    return recommendations
+
+
+def get_study_schedule_tips(study_hours: float, attendance: float) -> list[str]:
+    """Generate study schedule recommendations"""
+    tips = []
+    
+    if study_hours < 2:
+        tips.append("🕐 Start with 2-3 hours daily, then gradually increase")
+    elif study_hours < 4:
+        tips.append("🕐 Try breaking your study into 2 sessions of 2 hours each")
+    elif study_hours < 6:
+        tips.append("🕐 Consider 3 sessions: morning (2h), afternoon (2h), evening (1h)")
+    else:
+        tips.append("🕐 Maintain your schedule: 3 focused sessions with breaks")
+    
+    if attendance < 60:
+        tips.append("📅 Attend at least 3-4 classes per week for better understanding")
+    elif attendance < 80:
+        tips.append("📅 Try to attend all classes - they provide crucial context")
+    else:
+        tips.append("📅 Your attendance is excellent - leverage class time for learning")
+    
+    return tips
+
+
+def make_prediction_record(
+    student_name: str,
+    study_hours: float,
+    attendance: float,
+    sleep_hours: float,
+    internet_usage: float,
+    previous_marks: float,
+    predicted_marks: float,
+    model_meta: dict,
+) -> pd.DataFrame:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    record = pd.DataFrame(
+        [
+            {
+                "Timestamp": now,
+                "Student_Name": student_name,
+                "Study_Hours": study_hours,
+                "Attendance": attendance,
+                "Sleep_Hours": sleep_hours,
+                "Internet_Usage": internet_usage,
+                "Previous_Marks": previous_marks,
+                "Predicted_Marks": round(predicted_marks, 2),
+                "Model_Type": model_meta.get("model_type", "Unknown"),
+                "Model_R2": model_meta.get("r2", None),
+                "Model_MAE": model_meta.get("mae", None),
+            }
+        ]
+    )
+    return record
+
+
+def generate_pdf_from_record(record_df: pd.DataFrame, title: str = "Student Marks Prediction Report") -> bytes:
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    c.setTitle(title)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(72, height - 72, title)
+
+    c.setFont("Helvetica", 11)
+    y = height - 110
+    for col in record_df.columns:
+        text = f"{col}: {record_df.iloc[0][col]}"
+        c.drawString(72, y, text)
+        y -= 18
+        if y < 72:
+            c.showPage()
+            y = height - 72
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+# Sidebar - Data & Model Controls
+with st.sidebar:
+    st.header("⚙️ Controls")
+    st.markdown("Upload a dataset or use the sample. Then choose a model and train.")
+
+    uploaded_file = st.file_uploader(
+        "Upload CSV (must include required columns)",
+        type=["csv"],
+        help="Required columns: Study_Hours, Attendance, Sleep_Hours, Internet_Usage, Previous_Marks, Marks",
+    )
+
+    st.divider()
+
+    model_choice = st.selectbox("Model", ["Random Forest", "Linear Regression"], index=0)
+    rf_n_estimators = st.slider("RF: n_estimators", min_value=50, max_value=500, value=200, step=50, help="Only used for Random Forest")
+    rf_max_depth = st.slider("RF: max_depth (0 for None)", min_value=0, max_value=50, value=0, step=1, help="Only used for Random Forest")
+    rf_max_depth = None if rf_max_depth == 0 else rf_max_depth
+
+    st.divider()
+    retrain = st.button("🔁 Train / Retrain Model", type="primary")
+
+# Main - Title
+st.title("🧠 Predict Student Marks")
+st.caption("Predict marks from study hours and academic factors. Upload your dataset or use the provided sample.")
+
+# Load/choose dataset
+if uploaded_file is not None:
+    try:
+        data = pd.read_csv(uploaded_file)
+    except Exception as e:
+        st.error(f"Failed to read CSV: {e}")
+        data = load_default_dataset()
+        st.stop()
+else:
+    data = load_default_dataset()
+
+# Validate dataset
+is_valid, missing_cols = validate_dataset(data)
+if not is_valid:
+    st.error(f"Dataset is missing required columns: {missing_cols}")
+    st.stop()
+
+# Show dataset preview and stats
+with st.expander("📄 Dataset Preview", expanded=False):
+    st.dataframe(data.head(20), use_container_width=True)
+
+with st.expander("📊 Dataset Summary Statistics", expanded=False):
+    numeric_cols = [c for c in data.columns if c in (FEATURE_COLUMNS + [TARGET_COLUMN])]
+    st.dataframe(data[numeric_cols].describe().T)
+
+# Train or load model
+if "model" not in st.session_state:
+    loaded_model, loaded_meta = load_model()
+    if loaded_model is None:
+        model, meta = train_and_evaluate(
+            data, 
+            model_type=("Linear Regression" if model_choice == "Linear Regression" else "Random Forest"),
+            rf_n_estimators=rf_n_estimators,
+            rf_max_depth=rf_max_depth,
+        )
+        save_model(model, meta)
+        st.session_state.model = model
+        st.session_state.model_meta = meta
+        st.success("Model trained on the dataset and saved.")
+    else:
+        st.session_state.model = loaded_model
+        st.session_state.model_meta = loaded_meta
+        st.info(f"Loaded saved model: {loaded_meta.get('model_type', 'Unknown')}")
+
+# Retrain on demand
+if retrain:
+    model, meta = train_and_evaluate(
+        data, 
+        model_type=("Linear Regression" if model_choice == "Linear Regression" else "Random Forest"),
+        rf_n_estimators=rf_n_estimators,
+        rf_max_depth=rf_max_depth,
+    )
+    save_model(model, meta)
+    st.session_state.model = model
+    st.session_state.model_meta = meta
+    st.success("Model retrained and saved.")
+
+# Show model metrics
+with st.container(border=True):
+    st.subheader("📈 Model Accuracy")
+    meta = st.session_state.get("model_meta", {})
+    cols = st.columns(3)
+    cols[0].metric("Model", meta.get("model_type", "Unknown"))
+    cols[1].metric("R²", f"{meta.get('r2', float('nan')):.3f}" if meta.get("r2") is not None else "N/A")
+    cols[2].metric("MAE", f"{meta.get('mae', float('nan')):.2f}" if meta.get("mae") is not None else "N/A")
+    st.caption("R² close to 1 and lower MAE indicate better performance.")
+
+# Visualization: Study Hours vs. Marks
+with st.container(border=True):
+    st.subheader("📉 Study Hours vs Marks")
+    try:
+        fig = px.scatter(
+            data_frame=coerce_numeric(data, FEATURE_COLUMNS + [TARGET_COLUMN]).dropna(),
+            x="Study_Hours",
+            y="Marks",
+            color=None,
+            opacity=0.8,
+            template="plotly_dark",
+            labels={"Study_Hours": "Study Hours", "Marks": "Marks"},
+            title="Scatter: Study Hours vs Marks",
+        )
+        fig.update_traces(marker=dict(size=8, color="rgba(255, 0, 110, 0.7)"))
+        fig.update_layout(
+            plot_bgcolor="rgba(255, 255, 255, 0.02)",
+            paper_bgcolor="rgba(0, 0, 0, 0)",
+            font=dict(color="#e0e0e0"),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Could not render plot: {e}")
+
+with st.container(border=True):
+    st.subheader("🧠 Predict Student Marks")
+    
+    # Row 1: Student Name, Attendance, Previous Marks
+    col1, col2, col3 = st.columns(3, gap="medium")
+    with col1:
+        student_name = st.text_input("Student Name", value="John Doe", label_visibility="visible")
+    with col2:
+        attendance = st.number_input("Attendance (%)", min_value=0.0, max_value=100.0, value=80.0, step=1.0, label_visibility="visible")
+    with col3:
+        previous_marks = st.number_input("Previous Marks", min_value=0.0, max_value=100.0, value=65.0, step=1.0, label_visibility="visible")
+    
+    # Row 2: Study Hours, Internet Usage, Sleep Hours
+    col1, col2, col3 = st.columns(3, gap="medium")
+    with col1:
+        study_hours = st.number_input("Study Hours (per day)", min_value=0.0, max_value=16.0, value=4.0, step=0.5, label_visibility="visible")
+    with col2:
+        internet_usage = st.number_input("Internet Usage (hrs/day)", min_value=0.0, max_value=16.0, value=3.0, step=0.5, label_visibility="visible")
+    with col3:
+        sleep_hours = st.number_input("Sleep Hours (per day)", min_value=0.0, max_value=16.0, value=7.0, step=0.5, label_visibility="visible")
+    
+    st.caption("📊 Based on last exam/assessment")
+    
+    # Predict button - full width
+    predict_btn = st.button("🔮 Predict Marks", type="primary", use_container_width=True)
+
+    if predict_btn:
+        model = st.session_state.get("model", None)
+        if model is None:
+            st.error("Model not available. Please train the model first.")
+        else:
+            features = np.array([[study_hours, attendance, sleep_hours, internet_usage, previous_marks]])
+            pred = float(model.predict(features)[0])
+            pred = max(0.0, min(100.0, pred))
+
+            msg = performance_message(pred)
+            badge_class, badge_text = get_performance_badge(pred)
+            efficiency = calculate_study_efficiency(study_hours, attendance, sleep_hours, internet_usage)
+            recommendations = get_study_recommendations(study_hours, attendance, sleep_hours, internet_usage, pred, previous_marks)
+            schedule_tips = get_study_schedule_tips(study_hours, attendance)
+            improvement_recs = get_improvement_recommendations(study_hours, attendance, sleep_hours, internet_usage, pred, previous_marks, model)
+
+            st.success("Prediction complete!")
+            
+            st.markdown(f"""
+            <div class="prediction-card">
+                <div class="prediction-score">{pred:.2f} / 100</div>
+                <p style="color: #b0b0b0; margin-top: 0.5rem;">{msg}</p>
+                <div class="performance-badge {badge_class}">{badge_text}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Study Efficiency", f"{efficiency:.1f}%", delta=f"{efficiency - 50:.1f}%" if efficiency > 50 else None)
+            with col2:
+                improvement = pred - previous_marks
+                st.metric("Expected Change", f"{improvement:+.1f}", delta=f"{improvement:+.1f} points")
+            with col3:
+                confidence = st.session_state.get('model_meta', {}).get('r2', 0) * 100
+                st.metric("Model Confidence", f"{confidence:.1f}%")
+            with col4:
+                performance_gap = 100 - pred
+                st.metric("Gap to Perfect", f"{performance_gap:.1f}", delta=f"-{performance_gap:.1f}" if performance_gap > 0 else None)
+
+            st.markdown("### 📊 Performance Analysis")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.info(f"**Previous Marks:** {previous_marks:.1f}")
+            with col2:
+                st.info(f"**Predicted Marks:** {pred:.1f}")
+            with col3:
+                improvement_pct = ((pred - previous_marks) / previous_marks * 100) if previous_marks > 0 else 0
+                st.info(f"**Change:** {improvement_pct:+.1f}%")
+            
+            st.markdown("### 🔍 Study Factors Analysis")
+            factors_col1, factors_col2 = st.columns(2)
+            with factors_col1:
+                st.markdown("**Your Current Profile:**")
+                st.write(f"• Study Hours: {study_hours:.1f} hrs/day")
+                st.write(f"• Attendance: {attendance:.1f}%")
+                st.write(f"• Sleep Hours: {sleep_hours:.1f} hrs/day")
+                st.write(f"• Internet Usage: {internet_usage:.1f} hrs/day")
+            with factors_col2:
+                st.markdown("**Efficiency Breakdown:**")
+                st.write(f"• Study Dedication: {'✅ Good' if study_hours >= 4 else '⚠️ Needs Improvement'}")
+                st.write(f"• Class Participation: {'✅ Excellent' if attendance >= 90 else '⚠️ Needs Improvement' if attendance >= 75 else '❌ Critical'}")
+                st.write(f"• Rest Quality: {'✅ Optimal' if 7 <= sleep_hours <= 9 else '⚠️ Needs Adjustment'}")
+                st.write(f"• Focus Level: {'✅ Good' if internet_usage <= 2 else '⚠️ Needs Improvement' if internet_usage <= 4 else '❌ Critical'}")
+            
+            st.markdown("### 💡 General Recommendations")
+            for rec in recommendations:
+                st.info(rec)
+            
+            if improvement_recs:
+                st.markdown("### 🚀 How to Improve Your Marks")
+                st.markdown(f"**Goal:** Reach {max(previous_marks + 4, 80):.0f}% or higher")
+                
+                for idx, rec in enumerate(improvement_recs, 1):
+                    with st.container(border=True):
+                        st.markdown(f"**{idx}. {rec['action']}**")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Current", rec['current'])
+                        with col2:
+                            st.metric("Target", rec['target'])
+                        with col3:
+                            st.metric("Impact", rec['impact'])
+                        st.markdown(f"💡 {rec['description']}")
+                        st.markdown(f"**Expected Score:** `{rec['new_score']}`")
+            
+            st.markdown("### 🕐 Study Schedule Tips")
+            for tip in schedule_tips:
+                st.success(tip)
+
+            st.markdown("### 📈 Performance Comparison")
+            comparison_data = pd.DataFrame({
+                'Metric': ['Previous Marks', 'Predicted Marks', 'Target (100)'],
+                'Score': [previous_marks, pred, 100]
+            })
+            fig = px.bar(
+                comparison_data,
+                x='Metric',
+                y='Score',
+                color='Metric',
+                template='plotly_dark',
+                color_discrete_sequence=['#ff006e', '#8338ec', '#3a86ff']
+            )
+            fig.update_layout(
+                plot_bgcolor="rgba(255, 255, 255, 0.02)",
+                paper_bgcolor="rgba(0, 0, 0, 0)",
+                font=dict(color="#e0e0e0"),
+                showlegend=False,
+                yaxis_range=[0, 105]
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("### 🎯 Study Optimization Tips")
+            tips_col1, tips_col2 = st.columns(2)
+            with tips_col1:
+                st.markdown("**Time Management:**")
+                if study_hours < 3:
+                    st.write("• Start with 30-min focused sessions")
+                    st.write("• Gradually increase to 1-2 hour blocks")
+                elif study_hours < 5:
+                    st.write("• Use Pomodoro technique (25 min focus + 5 min break)")
+                    st.write("• Take a longer break every 2 hours")
+                else:
+                    st.write("• Maintain your current schedule")
+                    st.write("• Ensure breaks every 90 minutes")
+            
+            with tips_col2:
+                st.markdown("**Focus Enhancement:**")
+                if internet_usage > 4:
+                    st.write("• Use app blockers during study time")
+                    st.write("• Keep phone in another room")
+                    st.write("• Set specific times for internet use")
+                else:
+                    st.write("• Your internet discipline is excellent")
+                    st.write("• Maintain this focus level")
+
+            st.markdown("### ⚠️ Risk Factors & Alerts")
+            risk_factors = []
+            if study_hours < 2:
+                risk_factors.append("🔴 Critical: Study hours too low - marks at risk")
+            elif study_hours < 3:
+                risk_factors.append("🟡 Warning: Study hours below recommended minimum")
+            
+            if attendance < 60:
+                risk_factors.append("🔴 Critical: Attendance too low - missing important content")
+            elif attendance < 75:
+                risk_factors.append("🟡 Warning: Attendance below recommended level")
+            
+            if sleep_hours < 5 or sleep_hours > 11:
+                risk_factors.append("🔴 Critical: Sleep pattern affecting performance")
+            elif sleep_hours < 6 or sleep_hours > 10:
+                risk_factors.append("🟡 Warning: Sleep pattern needs adjustment")
+            
+            if internet_usage > 6:
+                risk_factors.append("🔴 Critical: Internet usage too high - affecting focus")
+            elif internet_usage > 4:
+                risk_factors.append("🟡 Warning: Internet usage affecting study quality")
+            
+            if pred < previous_marks - 5:
+                risk_factors.append("🔴 Critical: Predicted marks significantly lower than previous")
+            elif pred < previous_marks:
+                risk_factors.append("🟡 Warning: Predicted marks lower than previous - review strategy")
+            
+            if risk_factors:
+                for risk in risk_factors:
+                    st.warning(risk)
+            else:
+                st.success("✅ No critical risk factors detected - Keep up the good work!")
+
+            st.markdown("### 📊 Peer Benchmarking")
+            avg_marks = data[TARGET_COLUMN].mean() if TARGET_COLUMN in data.columns else 70
+            avg_study = data['Study_Hours'].mean() if 'Study_Hours' in data.columns else 4
+            avg_attendance = data['Attendance'].mean() if 'Attendance' in data.columns else 80
+            
+            bench_col1, bench_col2, bench_col3 = st.columns(3)
+            with bench_col1:
+                vs_avg = "✅ Above" if pred > avg_marks else "⚠️ Below"
+                st.metric("vs Class Average", f"{vs_avg}", delta=f"{pred - avg_marks:+.1f}")
+            with bench_col2:
+                study_vs = "✅ More" if study_hours > avg_study else "⚠️ Less"
+                st.metric("Study Hours vs Avg", f"{study_vs}", delta=f"{study_hours - avg_study:+.1f}h")
+            with bench_col3:
+                attend_vs = "✅ Higher" if attendance > avg_attendance else "⚠️ Lower"
+                st.metric("Attendance vs Avg", f"{attend_vs}", delta=f"{attendance - avg_attendance:+.1f}%")
+
+            record_df = make_prediction_record(
+                student_name, study_hours, attendance, sleep_hours, internet_usage, previous_marks, pred, st.session_state.get("model_meta", {})
+            )
+
+            st.markdown("#### ⬇️ Download Prediction")
+            csv_bytes = record_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download CSV",
+                data=csv_bytes,
+                file_name=f"prediction_{student_name.replace(' ', '_')}.csv",
+                mime="text/csv",
+            )
+
+            pdf_bytes = generate_pdf_from_record(record_df)
+            st.download_button(
+                label="📄 Download PDF",
+                data=pdf_bytes,
+                file_name=f"prediction_{student_name.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+            )
+
+# Footer
+st.caption("Built with Streamlit, scikit-learn, pandas, and Plotly. Model stored with joblib.")
