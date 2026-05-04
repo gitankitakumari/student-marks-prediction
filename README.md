@@ -6,6 +6,13 @@ The app provides **accurate predictions**, **performance insights**, **factor an
 This project uses **Random Forest** and **Linear Regression**, allows **CSV upload**, supports **model retraining**, and includes a rich, **dashboard-style UI**.
 
 ---
+🚀 Live Demo
+
+👉 https://student-marks-predictor-ankita.streamlit.app/
+
+📂 GitHub Repository
+
+👉 https://github.com/gitankitakumari/student-marks-prediction
 
 ## ⭐ Features
 
